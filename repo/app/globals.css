@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #f6f7fb;
+  color: #0f172a;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-arus-purple text-white hover:bg-arus-purpleMid;
+  }
+  .btn-accent {
+    @apply btn bg-arus-amber text-arus-purple hover:bg-arus-amberDark;
+  }
+  .btn-secondary {
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+  }
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-arus-purpleLight focus:ring-1 focus:ring-arus-purpleLight;
+  }
+  .label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .th {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .td {
+    @apply px-4 py-3 text-sm text-slate-700;
+  }
+  .section-title {
+    @apply text-sm font-semibold uppercase tracking-wide text-slate-500;
+  }
+}
