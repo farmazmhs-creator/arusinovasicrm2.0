@@ -50,7 +50,7 @@ export default function SignupPage() {
   return (
     <div className="w-full max-w-sm py-8">
       <div className="mb-8 flex justify-center">
-        <Logo />
+        <Logo size="lg" />
       </div>
 
       <div className="rounded-2xl bg-white p-7 shadow-xl">

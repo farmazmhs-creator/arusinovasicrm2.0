@@ -46,8 +46,8 @@ export default function Sidebar({
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-arus-purple">
-      <div className="px-5 py-5">
-        <Logo />
+      <div className="px-5 py-6">
+        <Logo size="md" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3">
