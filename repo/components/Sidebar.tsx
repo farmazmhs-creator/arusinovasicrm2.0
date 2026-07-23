@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bell,
   LayoutDashboard,
   FileText,
   ShoppingCart,
@@ -15,6 +16,7 @@ import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 
 const LINKS = [
+  { href: "/actions", label: "Action Centre", icon: Bell, badge: true },
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/quotations", label: "Quotations", icon: FileText },
   { href: "/purchase-orders", label: "Purchase Orders", icon: ShoppingCart },
@@ -26,9 +28,11 @@ const LINKS = [
 export default function Sidebar({
   email,
   role,
+  urgentCount = 0,
 }: {
   email: string | null;
   role: string;
+  urgentCount?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -62,7 +66,16 @@ export default function Sidebar({
               }`}
             >
               <Icon style={{ width: 18, height: 18 }} />
-              {l.label}
+              <span className="flex-1">{l.label}</span>
+              {l.badge && urgentCount > 0 && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    active ? "bg-arus-purple text-white" : "bg-rose-500 text-white"
+                  }`}
+                >
+                  {urgentCount > 99 ? "99+" : urgentCount}
+                </span>
+              )}
             </Link>
           );
         })}

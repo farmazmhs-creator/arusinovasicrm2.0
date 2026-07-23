@@ -32,6 +32,9 @@ export default function PricebookClient() {
   const [error, setError] = useState<string | null>(null);
 
   // form state
+  const [isNew, setIsNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newSell, setNewSell] = useState("");
   const [productId, setProductId] = useState("");
   const [vendorName, setVendorName] = useState("");
   const [vendorType, setVendorType] = useState("third_party");
@@ -58,39 +61,80 @@ export default function PricebookClient() {
     load();
   }, [load]);
 
+  function resetForm() {
+    setShowForm(false);
+    setIsNew(false);
+    setNewName("");
+    setNewSell("");
+    setProductId("");
+    setVendorName("");
+    setCostPrice("");
+    setNotes("");
+    setValidUntil("");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!productId || !vendorName || !costPrice) {
-      setError("Product, vendor and cost are required.");
+
+    if (!vendorName || !costPrice) {
+      setError("Vendor and cost are required.");
       return;
     }
+
     setSaving(true);
-    const res = await fetch("/api/pricebook", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        product_id: productId,
-        vendor_name: vendorName,
-        vendor_type: vendorType,
-        cost_price: Number(costPrice),
-        effective_from: new Date(effectiveFrom).toISOString(),
-        valid_until: validUntil ? new Date(validUntil).toISOString() : null,
-        notes: notes || null,
-      }),
-    });
+    let res: Response;
+
+    if (isNew) {
+      // New product: one call creates the product, an inventory row (stock 0)
+      // and this first vendor cost together.
+      if (!newName.trim()) {
+        setSaving(false);
+        setError("Enter the new product's name.");
+        return;
+      }
+      res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName.trim(),
+          unit_price: Number(newSell || 0),
+          supplier: vendorName,
+          vendor_name: vendorName,
+          vendor_type: vendorType,
+          cost_price: Number(costPrice),
+          qty_on_hand: 0,
+          reorder_point: 10,
+        }),
+      });
+    } else {
+      if (!productId) {
+        setSaving(false);
+        setError("Pick a product, or switch to New product.");
+        return;
+      }
+      res = await fetch("/api/pricebook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_id: productId,
+          vendor_name: vendorName,
+          vendor_type: vendorType,
+          cost_price: Number(costPrice),
+          effective_from: new Date(effectiveFrom).toISOString(),
+          valid_until: validUntil ? new Date(validUntil).toISOString() : null,
+          notes: notes || null,
+        }),
+      });
+    }
+
     setSaving(false);
     if (!res.ok) {
       const j = await res.json();
       setError(j.error ?? "Failed to save.");
       return;
     }
-    setShowForm(false);
-    setProductId("");
-    setVendorName("");
-    setCostPrice("");
-    setNotes("");
-    setValidUntil("");
+    resetForm();
     load();
   }
 
@@ -113,11 +157,12 @@ export default function PricebookClient() {
   });
 
   const selectedProduct = products.find((p) => p.id === productId);
+  const sellForMargin = isNew
+    ? Number(newSell || 0)
+    : selectedProduct?.unit_price ?? 0;
   const previewMargin =
-    selectedProduct && costPrice
-      ? ((selectedProduct.unit_price - Number(costPrice)) /
-          selectedProduct.unit_price) *
-        100
+    sellForMargin && costPrice
+      ? ((sellForMargin - Number(costPrice)) / sellForMargin) * 100
       : null;
 
   const avgMargin =
@@ -135,7 +180,10 @@ export default function PricebookClient() {
             quote — margin flows straight into the dashboard.
           </p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn-accent">
+        <button
+          onClick={() => (showForm ? resetForm() : setShowForm(true))}
+          className="btn-accent"
+        >
           {showForm ? (
             <>
               <X style={{ width: 16, height: 16 }} /> Cancel
@@ -186,34 +234,88 @@ export default function PricebookClient() {
       {/* Add form */}
       {showForm && (
         <form onSubmit={submit} className="card mb-6">
-          <h2 className="mb-4 text-sm font-semibold text-slate-800">
-            Record a vendor quote
-          </h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-800">
+              Record a vendor quote
+            </h2>
+            {/* Existing vs brand-new product */}
+            <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+              {[
+                { v: false, label: "Existing product" },
+                { v: true, label: "New product" },
+              ].map((t) => (
+                <button
+                  key={String(t.v)}
+                  type="button"
+                  onClick={() => setIsNew(t.v)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    isNew === t.v
+                      ? "bg-white text-arus-purple shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isNew && (
+            <p className="mb-4 rounded-lg bg-arus-purple/5 px-3 py-2 text-xs text-slate-600">
+              This creates the product, adds it to inventory at zero stock, and
+              records this cost as its first pricebook entry — all in one step. A
+              product code is generated automatically.
+            </p>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="sm:col-span-2">
               <label className="label">Product</label>
-              <select
-                className="input"
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-              >
-                <option value="">Select product…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} — {p.sku}
-                  </option>
-                ))}
-              </select>
+              {isNew ? (
+                <input
+                  className="input"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="New product name"
+                />
+              ) : (
+                <select
+                  className="input"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                >
+                  <option value="">Select product…</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.sku}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="label">Selling price</label>
-              <input
-                className="input bg-slate-50"
-                disabled
-                value={
-                  selectedProduct ? formatMYR(selectedProduct.unit_price) : "—"
-                }
-              />
+              {isNew ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="input"
+                  value={newSell}
+                  onChange={(e) => setNewSell(e.target.value)}
+                  placeholder="What you sell it for"
+                />
+              ) : (
+                <input
+                  className="input bg-slate-50"
+                  disabled
+                  value={
+                    selectedProduct
+                      ? formatMYR(selectedProduct.unit_price)
+                      : "—"
+                  }
+                />
+              )}
             </div>
 
             <div>
@@ -257,33 +359,37 @@ export default function PricebookClient() {
               )}
             </div>
 
-            <div>
-              <label className="label">Effective from</label>
-              <input
-                type="date"
-                className="input"
-                value={effectiveFrom}
-                onChange={(e) => setEffectiveFrom(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label">Valid until (optional)</label>
-              <input
-                type="date"
-                className="input"
-                value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label">Notes</label>
-              <input
-                className="input"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Q3 contract pricing"
-              />
-            </div>
+            {!isNew && (
+              <>
+                <div>
+                  <label className="label">Effective from</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={effectiveFrom}
+                    onChange={(e) => setEffectiveFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label">Valid until (optional)</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={validUntil}
+                    onChange={(e) => setValidUntil(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label">Notes</label>
+                  <input
+                    className="input"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="e.g. Q3 contract pricing"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {error && (
@@ -294,7 +400,11 @@ export default function PricebookClient() {
 
           <div className="mt-4 flex justify-end">
             <button type="submit" disabled={saving} className="btn-primary">
-              {saving ? "Saving…" : "Save vendor quote"}
+              {saving
+                ? "Saving…"
+                : isNew
+                ? "Add product & cost"
+                : "Save vendor quote"}
             </button>
           </div>
         </form>

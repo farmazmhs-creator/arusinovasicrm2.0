@@ -22,22 +22,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const body = await request.json();
-  if (!body.sku || !body.name) {
+  if (!body.name) {
     return NextResponse.json(
-      { error: "sku and name are required" },
+      { error: "Product name is required" },
       { status: 400 }
     );
+  }
+
+  // Auto-generate the SKU if none supplied — non-technical users shouldn't
+  // have to invent one. Next in the AI-#### sequence.
+  let sku = (body.sku || "").trim();
+  if (!sku) {
+    const { data: last } = await supabase
+      .from("products")
+      .select("sku")
+      .ilike("sku", "AI-%")
+      .order("sku", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const n = last?.sku ? parseInt(last.sku.replace(/\D/g, ""), 10) || 0 : 0;
+    sku = `AI-${String(n + 1).padStart(4, "0")}`;
   }
 
   const { data: product, error } = await supabase
     .from("products")
     .insert({
-      sku: body.sku,
+      sku,
       name: body.name,
       supplier: body.supplier || null,
       unit_price: Number(body.unit_price ?? 0),
     })
-    .select("id")
+    .select("id, sku")
     .single();
 
   if (error || !product)
@@ -67,5 +82,5 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ id: product.id });
+  return NextResponse.json({ id: product.id, sku: product.sku });
 }
