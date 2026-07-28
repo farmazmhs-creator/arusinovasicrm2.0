@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 
@@ -33,14 +34,19 @@ export default function SignupPage() {
       password,
       options: { data: { name, role } },
     });
-    setLoading(false);
 
-    if (error) return setError(error.message);
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
 
     if (data.session) {
+      // Keep loading through the redirect + first load.
       router.push("/");
       router.refresh();
     } else {
+      setLoading(false);
       setNotice(
         "Account created. If email confirmation is enabled, confirm via email then sign in."
       );
@@ -126,7 +132,17 @@ export default function SignupPage() {
             disabled={loading}
             className="btn-primary w-full"
           >
-            {loading ? "Creating…" : "Create Account"}
+            {loading ? (
+              <>
+                <Loader2
+                  style={{ width: 16, height: 16 }}
+                  className="animate-spin"
+                />
+                Creating…
+              </>
+            ) : (
+              "Create Account"
+            )}
           </button>
         </form>
 

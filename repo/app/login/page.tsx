@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 
@@ -16,17 +17,23 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return; // ignore double submits
     setError(null);
     setLoading(true);
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    setLoading(false);
+
     if (error) {
       setError(error.message);
+      setLoading(false);
       return;
     }
+
+    // Keep the button in its loading state through the redirect + dashboard
+    // load — don't reset it, or it looks idle while the page is still loading.
     router.push("/");
     router.refresh();
   }
@@ -49,7 +56,8 @@ export default function LoginPage() {
             <input
               type="email"
               required
-              className="input"
+              disabled={loading}
+              className="input disabled:bg-slate-50"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@arusinovasi.my"
@@ -60,7 +68,8 @@ export default function LoginPage() {
             <input
               type="password"
               required
-              className="input"
+              disabled={loading}
+              className="input disabled:bg-slate-50"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -78,8 +87,24 @@ export default function LoginPage() {
             disabled={loading}
             className="btn-primary w-full"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? (
+              <>
+                <Loader2
+                  style={{ width: 16, height: 16 }}
+                  className="animate-spin"
+                />
+                Signing in…
+              </>
+            ) : (
+              "Sign in"
+            )}
           </button>
+
+          {loading && (
+            <p className="text-center text-xs text-slate-400">
+              Loading your workspace — this can take a few seconds.
+            </p>
+          )}
         </form>
 
         <p className="mt-5 text-center text-sm text-slate-500">
