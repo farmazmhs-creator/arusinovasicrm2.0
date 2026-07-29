@@ -8,9 +8,9 @@
 type Size = "sm" | "md" | "lg";
 
 const HEIGHT: Record<Size, string> = {
-  sm: "h-8", // ~32px
-  md: "h-12", // ~48px
-  lg: "h-20", // ~80px
+  sm: "h-10", // ~40px
+  md: "h-16", // ~64px — sidebar
+  lg: "h-28", // ~112px — login
 };
 
 export default function Logo({
