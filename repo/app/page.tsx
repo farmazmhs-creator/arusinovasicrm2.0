@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
-import DashboardClient from "@/components/dashboard/DashboardClient";
+import DashboardShell from "@/components/dashboard/DashboardShell";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   };
 
   return (
-    <DashboardClient
+    <DashboardShell
       options={options}
       role={(profile?.role as string) ?? "sales_rep"}
       name={(profile?.name as string) ?? "there"}
