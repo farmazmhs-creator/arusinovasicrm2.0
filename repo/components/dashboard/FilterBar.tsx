@@ -18,6 +18,12 @@ export type FilterOptions = {
   customers: { id: string; hospital_name: string; state: string | null }[];
   reps: { id: string; name: string; code: string }[];
   products: { id: string; name: string; sku: string; supplier: string | null }[];
+  contacts: {
+    id: string;
+    customer_id: string;
+    name: string;
+    department: string | null;
+  }[];
   states: string[];
   suppliers: string[];
 };

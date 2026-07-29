@@ -27,8 +27,6 @@ export default function DashboardShell({
   const defaultView: View = role === "ops" ? "ops" : "sales";
   const [view, setView] = useState<View>(defaultView);
 
-  const reps = options?.reps ?? [];
-
   return (
     <div>
       {/* View toggle */}
@@ -58,7 +56,7 @@ export default function DashboardShell({
       </div>
 
       {view === "sales" ? (
-        <SalesDashboard role={role} name={name} reps={reps} />
+        <SalesDashboard role={role} name={name} options={options} />
       ) : (
         <DashboardClient options={options} role={role} name={name} />
       )}

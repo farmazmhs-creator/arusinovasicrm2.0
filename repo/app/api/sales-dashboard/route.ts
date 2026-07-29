@@ -39,6 +39,7 @@ export async function GET(request: Request) {
   const from = searchParams.get("from") || null;
   const to = searchParams.get("to") || null;
   const compare = searchParams.get("compare") || "none";
+  const gran = searchParams.get("gran") || "month";
   const requestedRep = nullify(searchParams.get("rep"));
 
   // Enforce scoping: a rep can only ever see their own numbers.
@@ -50,6 +51,11 @@ export async function GET(request: Request) {
     p_from: from,
     p_to: to,
     p_compare: compare,
+    p_gran: gran,
+    p_state: nullify(searchParams.get("state")),
+    p_customer: nullify(searchParams.get("customer")),
+    p_contact: nullify(searchParams.get("contact")),
+    p_product: nullify(searchParams.get("product")),
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
