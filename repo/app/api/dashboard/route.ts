@@ -13,6 +13,21 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const supabase = await createClient();
 
+  // Ops dashboard is back-office only. Sales reps must use /api/sales-dashboard,
+  // which is scoped to their own numbers.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const { data: prof } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (prof?.role !== "ops" && prof?.role !== "director")
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const nullify = (v: string | null) => (v && v !== "all" ? v : null);
 
   const from = searchParams.get("from");

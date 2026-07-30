@@ -7,6 +7,20 @@ export async function GET(request: Request) {
   const q = searchParams.get("q");
   const supabase = await createClient();
 
+  // Vendor costs are confidential — back-office only.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const { data: prof } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (prof?.role !== "ops" && prof?.role !== "director")
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   let query = supabase
     .from("product_costs")
     .select(

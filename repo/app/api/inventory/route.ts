@@ -4,6 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET() {
   const supabase = await createClient();
 
+  // Inventory is an operations view — back-office only.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const { data: prof } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (prof?.role !== "ops" && prof?.role !== "director")
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const [{ data: products }, { data: stock }, { data: flags }] =
     await Promise.all([
       supabase.from("products").select("id, sku, name, supplier, unit_price").order("name"),

@@ -15,14 +15,15 @@ import {
 import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 
+// `backoffice: true` links are hidden from sales reps (ops/director only).
 const LINKS = [
   { href: "/actions", label: "Action Centre", icon: Bell, badge: true },
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/quotations", label: "Quotations", icon: FileText },
   { href: "/purchase-orders", label: "Purchase Orders", icon: ShoppingCart },
   { href: "/customers", label: "Customers", icon: Building2 },
-  { href: "/inventory", label: "Inventory", icon: Boxes },
-  { href: "/pricebook", label: "Pricebook", icon: BookOpen },
+  { href: "/inventory", label: "Inventory", icon: Boxes, backoffice: true },
+  { href: "/pricebook", label: "Pricebook", icon: BookOpen, backoffice: true },
 ];
 
 export default function Sidebar({
@@ -38,6 +39,9 @@ export default function Sidebar({
   const router = useRouter();
   const supabase = createClient();
 
+  const isBackoffice = role === "ops" || role === "director";
+  const links = LINKS.filter((l) => !l.backoffice || isBackoffice);
+
   async function logout() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -51,7 +55,7 @@ export default function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 px-3">
-        {LINKS.map((l) => {
+        {links.map((l) => {
           const Icon = l.icon;
           const active =
             l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);

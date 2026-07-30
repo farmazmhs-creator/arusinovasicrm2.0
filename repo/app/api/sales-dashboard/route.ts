@@ -17,16 +17,17 @@ export async function GET(request: Request) {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, email, name")
+    .select("role, email, name, rep_id")
     .eq("id", user.id)
     .single();
 
   const role = profile?.role ?? "sales_rep";
   const email = profile?.email ?? user.email ?? null;
 
-  // Resolve this user's own rep record (by email).
-  let selfRepId: string | null = null;
-  if (email) {
+  // Resolve this user's own rep record: prefer the explicit profile→rep link,
+  // fall back to an email match for any account not yet linked.
+  let selfRepId: string | null = profile?.rep_id ?? null;
+  if (!selfRepId && email) {
     const { data: rep } = await supabase
       .from("sales_reps")
       .select("id")
