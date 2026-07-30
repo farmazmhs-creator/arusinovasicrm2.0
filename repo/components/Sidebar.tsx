@@ -10,6 +10,7 @@ import {
   Building2,
   Boxes,
   BookOpen,
+  Target,
   LogOut,
 } from "lucide-react";
 import Logo from "@/components/Logo";
@@ -24,6 +25,7 @@ const LINKS = [
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/inventory", label: "Inventory", icon: Boxes, backoffice: true },
   { href: "/pricebook", label: "Pricebook", icon: BookOpen, backoffice: true },
+  { href: "/targets", label: "Targets", icon: Target, director: true },
 ];
 
 export default function Sidebar({
@@ -40,7 +42,10 @@ export default function Sidebar({
   const supabase = createClient();
 
   const isBackoffice = role === "ops" || role === "director";
-  const links = LINKS.filter((l) => !l.backoffice || isBackoffice);
+  const isDirector = role === "director";
+  const links = LINKS.filter(
+    (l) => (!l.backoffice || isBackoffice) && (!l.director || isDirector)
+  );
 
   async function logout() {
     await supabase.auth.signOut();

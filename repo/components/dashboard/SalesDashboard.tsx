@@ -258,10 +258,13 @@ export default function SalesDashboard({
     v: Number(r.v),
   }));
 
-  const companyRev = useMemo(
+  // True company revenue is the KPI total; rep rows only cover POs linked to a
+  // rep's quote, so the attributed sum is usually less (rest = unlinked POs).
+  const repAttributed = useMemo(
     () => byRep.reduce((a, r) => a + Number(r.revenue || 0), 0),
     [byRep]
   );
+  const companyRev = Number(s.revenue ?? 0) || repAttributed;
 
   const selectCls =
     "input h-9 w-auto min-w-[130px] py-1 text-sm";
@@ -682,7 +685,8 @@ export default function SalesDashboard({
               </p>
               <p className="mt-2 text-3xl font-bold">{formatMYR(companyRev)}</p>
               <p className="mt-1 text-xs text-white/70">
-                across {byRep.length} active reps
+                {formatMYR(repAttributed)} linked to {byRep.length} reps · rest
+                from POs with no rep
               </p>
             </div>
             <div className="card">
@@ -705,7 +709,7 @@ export default function SalesDashboard({
                 Avg per rep
               </p>
               <p className="mt-2 text-2xl font-bold text-slate-900">
-                {formatMYR(byRep.length ? companyRev / byRep.length : 0)}
+                {formatMYR(byRep.length ? repAttributed / byRep.length : 0)}
               </p>
               <p className="mt-1 text-xs text-slate-500">revenue contribution</p>
             </div>
