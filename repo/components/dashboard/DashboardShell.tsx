@@ -5,6 +5,7 @@ import { LineChart, Settings2 } from "lucide-react";
 import type { FilterOptions } from "./FilterBar";
 import SalesDashboard from "./SalesDashboard";
 import DashboardClient from "./DashboardClient";
+import DirectorScorecard from "./DirectorScorecard";
 
 type View = "sales" | "ops";
 
@@ -45,7 +46,7 @@ export default function DashboardShell({
             }`}
           >
             <LineChart style={{ width: 16, height: 16 }} />
-            Sales
+            Scorecard
           </button>
           <button
             onClick={() => setView("ops")}
@@ -62,7 +63,11 @@ export default function DashboardShell({
       )}
 
       {effectiveView === "sales" ? (
-        <SalesDashboard role={role} name={name} options={options} />
+        role === "director" ? (
+          <DirectorScorecard name={name} options={options} />
+        ) : (
+          <SalesDashboard role={role} name={name} options={options} />
+        )
       ) : (
         <DashboardClient options={options} role={role} name={name} />
       )}
