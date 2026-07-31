@@ -232,6 +232,7 @@ export default async function QuotationDetailPage({
           id={q.id}
           status={q.status}
           holdNote={q.hold_note ?? null}
+          processedBy={q.processed_by ?? null}
         />
       </div>
     </div>

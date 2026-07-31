@@ -14,19 +14,33 @@ export async function GET(
   const { data, error } = await supabase
     .from("po_documents")
     .select(
-      "id, file_path, file_name, file_size, mime_type, uploaded_at, uploaded_by, user_profiles(name)"
+      "id, file_path, file_name, file_size, mime_type, uploaded_at, uploaded_by"
     )
     .eq("purchase_order_id", id)
     .order("uploaded_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const uploaderIds = [
+    ...new Set((data ?? []).map((d: any) => d.uploaded_by).filter(Boolean)),
+  ];
+  const { data: profiles } = uploaderIds.length
+    ? await supabase.from("user_profiles").select("id, name").in("id", uploaderIds)
+    : { data: [] as { id: string; name: string }[] };
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.name]));
+
   const withUrls = await Promise.all(
     (data ?? []).map(async (doc: any) => {
       const { data: signed } = await supabase.storage
         .from(BUCKET)
         .createSignedUrl(doc.file_path, 60 * 60);
-      return { ...doc, url: signed?.signedUrl ?? null };
+      return {
+        ...doc,
+        user_profiles: doc.uploaded_by
+          ? { name: nameById.get(doc.uploaded_by) ?? null }
+          : null,
+        url: signed?.signedUrl ?? null,
+      };
     })
   );
 

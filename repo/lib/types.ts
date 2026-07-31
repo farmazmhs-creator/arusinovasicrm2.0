@@ -105,7 +105,8 @@ export type QuoteStatus =
   | "on_hold_vendor"
   | "on_hold_sales_rep"
   | "on_hold_director"
-  | "cancelled";
+  | "cancelled"
+  | "closed";
 
 /** Ordered workflow shown in the UI. */
 export const QUOTE_STATUSES: QuoteStatus[] = [
@@ -117,6 +118,7 @@ export const QUOTE_STATUSES: QuoteStatus[] = [
   "on_hold_sales_rep",
   "on_hold_director",
   "cancelled",
+  "closed",
 ];
 
 /** The happy path, used for the progress timeline. */

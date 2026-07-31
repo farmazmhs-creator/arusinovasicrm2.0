@@ -38,6 +38,7 @@ export async function PUT(
   const body = await request.json();
   const patch: Record<string, unknown> = {};
   if (typeof body.status === "string") patch.status = body.status;
+  if (body.processed_by !== undefined) patch.processed_by = body.processed_by || null;
   if (body.hold_note !== undefined) patch.hold_note = body.hold_note || null;
   if (body.external_ref !== undefined) patch.external_ref = body.external_ref;
   if (body.received_at !== undefined) patch.received_at = body.received_at;

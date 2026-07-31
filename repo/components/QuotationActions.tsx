@@ -1,47 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QUOTE_STATUSES, ON_HOLD_STATUSES } from "@/lib/types";
 import { statusLabel } from "@/lib/format";
+
+type OpsUser = { id: string; name: string; role: string };
 
 export default function QuotationActions({
   id,
   status,
   holdNote,
+  processedBy,
 }: {
   id: string;
   status: string;
   holdNote: string | null;
+  processedBy?: string | null;
 }) {
   const router = useRouter();
   const [current, setCurrent] = useState(status);
   const [note, setNote] = useState(holdNote ?? "");
+  const [assignee, setAssignee] = useState(processedBy ?? "");
+  const [opsUsers, setOpsUsers] = useState<OpsUser[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const isHold = ON_HOLD_STATUSES.includes(current as any);
 
-  async function save(nextStatus: string, nextNote?: string) {
+  useEffect(() => {
+    fetch("/api/ops-users")
+      .then((r) => r.json())
+      .then((j) => setOpsUsers(j.data ?? []))
+      .catch(() => setOpsUsers([]));
+  }, []);
+
+  async function put(patch: Record<string, unknown>, okMsg: string) {
     setBusy(true);
     setMsg(null);
     const res = await fetch(`/api/quotations/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: nextStatus,
-        hold_note: nextNote ?? note,
-      }),
+      body: JSON.stringify(patch),
     });
     setBusy(false);
     if (res.ok) {
-      setCurrent(nextStatus);
-      setMsg("Saved — timestamps updated automatically.");
+      setMsg(okMsg);
       router.refresh();
     } else {
       setMsg("Update failed.");
     }
   }
+
+  async function save(nextStatus: string, nextNote?: string) {
+    await put(
+      { status: nextStatus, hold_note: nextNote ?? note },
+      "Saved — timestamps updated automatically."
+    );
+    setCurrent(nextStatus);
+  }
+
+  async function assign(userId: string) {
+    setAssignee(userId);
+    await put({ processed_by: userId || null }, "Owner updated.");
+  }
+
+  const terminal = current === "cancelled" || current === "closed";
 
   return (
     <div className="space-y-4">
@@ -62,15 +86,36 @@ export default function QuotationActions({
           </select>
         </div>
 
-        {current !== "completed" && current !== "sent_to_customer" && (
-          <button
-            onClick={() => save("completed")}
+        {/* Assign to an Ops person (Processed By) */}
+        <div className="min-w-[220px]">
+          <label className="label">Assigned to (Ops)</label>
+          <select
+            className="input"
+            value={assignee}
             disabled={busy}
-            className="btn-accent"
+            onChange={(e) => assign(e.target.value)}
           >
-            Mark Completed
-          </button>
-        )}
+            <option value="">Unassigned</option>
+            {opsUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+                {u.role === "director" ? " (Director)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {current !== "completed" &&
+          current !== "sent_to_customer" &&
+          !terminal && (
+            <button
+              onClick={() => save("completed")}
+              disabled={busy}
+              className="btn-accent"
+            >
+              Mark Completed
+            </button>
+          )}
         {current === "completed" && (
           <button
             onClick={() => save("sent_to_customer")}
@@ -78,6 +123,15 @@ export default function QuotationActions({
             className="btn-primary"
           >
             Mark Sent to Customer
+          </button>
+        )}
+        {current === "cancelled" && (
+          <button
+            onClick={() => save("closed")}
+            disabled={busy}
+            className="btn-primary"
+          >
+            Mark Closed
           </button>
         )}
       </div>
