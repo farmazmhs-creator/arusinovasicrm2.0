@@ -169,6 +169,9 @@ export default function DirectorScorecard({
   }, [data]);
 
   const companyRev = byRep.reduce((a, r) => a + Number(r.revenue || 0), 0);
+  // Only show reps with attributed revenue; collapse the rest into a count.
+  const activeReps = byRep.filter((r: any) => Number(r.revenue) > 0);
+  const hiddenReps = byRep.length - activeReps.length;
   const topRep = byRep[0];
   const topRegion = regionTotals[0];
 
@@ -235,8 +238,8 @@ export default function DirectorScorecard({
 
       {/* Stage rail */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-4">
-        {/* 1 Target */}
-        <Stage n="1 · Target" tone={targetPct >= 90 ? "g" : targetPct >= 60 ? "a" : "r"} flag={paceLabel}>
+        {/* 1 Target — never alarm-red; amber signals "behind", red is reserved for Execution alerts */}
+        <Stage n="1 · Target" tone={targetPct >= 90 ? "g" : "a"} flag={paceLabel}>
           <div className="flex items-center gap-3">
             <Ring pct={Math.min(100, targetPct)} />
             <div>
@@ -322,8 +325,13 @@ export default function DirectorScorecard({
       </div>
 
       {/* Heatmaps */}
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Heatmaps</h2>
+      <div className="mb-3 flex items-end justify-between">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Heatmaps</h2>
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            Sparse cells reflect demo data — fills in with the historical import
+          </p>
+        </div>
         <Seg items={GRANS} value={gran} onChange={setGran} />
       </div>
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -372,10 +380,10 @@ export default function DirectorScorecard({
           <span className="text-xs text-slate-400">{formatMYR(companyRev)} attributed to reps</span>
         </div>
         <div className="space-y-2.5">
-          {byRep.map((r, i) => {
+          {activeReps.map((r, i) => {
             const share = companyRev > 0 ? (Number(r.revenue) / companyRev) * 100 : 0;
             const spark = (repSpark.get(r.name) ?? []).map((x) => x.v);
-            const rag = i < byRep.length / 3 ? "g" : i < (2 * byRep.length) / 3 ? "a" : "r";
+            const rag = i < activeReps.length / 3 ? "g" : i < (2 * activeReps.length) / 3 ? "a" : "r";
             return (
               <div key={r.id} className="grid grid-cols-[150px_1fr_44px_54px] items-center gap-3">
                 <span className="flex items-center gap-2 truncate text-sm font-medium text-slate-800">
@@ -390,7 +398,14 @@ export default function DirectorScorecard({
               </div>
             );
           })}
-          {byRep.length === 0 && <p className="text-sm text-slate-400">No rep-attributed revenue in range.</p>}
+          {activeReps.length === 0 && (
+            <p className="text-sm text-slate-400">No rep-attributed revenue in range.</p>
+          )}
+          {hiddenReps > 0 && activeReps.length > 0 && (
+            <p className="pt-1 text-xs text-slate-400">
+              +{hiddenReps} rep{hiddenReps > 1 ? "s" : ""} with no attributed revenue this range
+            </p>
+          )}
         </div>
       </div>
 
