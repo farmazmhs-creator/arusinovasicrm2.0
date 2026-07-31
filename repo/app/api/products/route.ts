@@ -86,6 +86,8 @@ export async function POST(request: Request) {
         body.moq !== undefined && body.moq !== "" && body.moq !== null
           ? Number(body.moq)
           : null,
+      vendor_quote_path: body.vendor_quote_path || null,
+      vendor_quote_name: body.vendor_quote_name || null,
     });
   }
 

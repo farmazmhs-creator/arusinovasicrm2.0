@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMYR, formatDate } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import PoActions from "@/components/PoActions";
+import PoDocuments from "@/components/PoDocuments";
 import type { PurchaseOrder, PoItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,8 @@ export default async function PurchaseOrderDetailPage({
           <span>{formatMYR(p.total_amount)}</span>
         </div>
       </div>
+
+      <PoDocuments poId={p.id} poNumber={p.po_number} />
 
       <div className="card">
         <h2 className="mb-3 font-semibold text-slate-800">Actions</h2>

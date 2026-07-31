@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Paperclip } from "lucide-react";
 import { formatMYR } from "@/lib/format";
+import { createClient } from "@/lib/supabase/client";
 
 type Option = { id: string; label: string; unit_price?: number };
 type Item = { product_id: string; quantity: number; unit_price: number };
@@ -31,6 +32,8 @@ export default function CreateQuoteRequestPage() {
   ]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const supabase = createClient();
 
   useEffect(() => {
     async function load() {
@@ -104,11 +107,32 @@ export default function CreateQuoteRequestPage() {
       }),
     });
     const json = await res.json();
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       setError(json.error ?? "Failed to save request.");
       return;
     }
+    // Attach the quotation document, if one was chosen.
+    if (file) {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `quotes/${json.id}/${Date.now()}-${safe}`;
+      const { error: upErr } = await supabase.storage
+        .from("quote-docs")
+        .upload(path, file);
+      if (!upErr) {
+        await fetch(`/api/quotations/${json.id}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file_path: path,
+            file_name: file.name,
+            file_size: file.size,
+            mime_type: file.type,
+          }),
+        });
+      }
+    }
+    setSaving(false);
     router.push(`/quotations/${json.id}`);
   }
 
@@ -291,6 +315,25 @@ export default function CreateQuoteRequestPage() {
             <span>Estimated Value</span>
             <span>{formatMYR(total)}</span>
           </div>
+        </div>
+
+        <div className="card">
+          <label className="label flex items-center gap-1.5">
+            <Paperclip style={{ width: 14, height: 14 }} /> Attach quotation
+            document (optional)
+          </label>
+          <input
+            type="file"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="mt-1 block w-full text-sm text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-arus-purple/10 file:px-3 file:py-1.5 file:text-arus-purple hover:file:bg-arus-purple/20"
+          />
+          {file && (
+            <p className="mt-1 truncate text-xs text-slate-400">{file.name}</p>
+          )}
+          <p className="mt-1 text-xs text-slate-500">
+            The finished quotation from your quoting system. You can view or
+            download it later from this request.
+          </p>
         </div>
 
         {error && (

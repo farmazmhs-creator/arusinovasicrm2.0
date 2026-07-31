@@ -115,11 +115,13 @@ export default function PricebookClient() {
       moq: moq || null,
     };
 
-    // Upload the vendor quotation document (existing-product path keys on the id).
+    // Upload the vendor quotation document (works for new and existing products).
     let vendorQuotePath: string | null = null;
     let vendorQuoteName: string | null = null;
-    if (file && !isNew && productId) {
-      const path = `vendor-quotes/${productId}/${Date.now()}-${file.name}`;
+    if (file) {
+      const key = isNew ? "new" : productId;
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `vendor-quotes/${key}/${Date.now()}-${safe}`;
       const { error: upErr } = await supabase.storage
         .from("quote-docs")
         .upload(path, file);
@@ -153,6 +155,8 @@ export default function PricebookClient() {
           qty_on_hand: 0,
           reorder_point: 10,
           ...vendorDetail,
+          vendor_quote_path: vendorQuotePath,
+          vendor_quote_name: vendorQuoteName,
         }),
       });
     } else {
@@ -486,19 +490,17 @@ export default function PricebookClient() {
                 placeholder="e.g. 100% payment before delivery; quote valid 30 days"
               />
             </div>
-            {!isNew && (
-              <div>
-                <label className="label">Vendor quote (upload)</label>
-                <input
-                  type="file"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-arus-purple/10 file:px-3 file:py-1.5 file:text-arus-purple hover:file:bg-arus-purple/20"
-                />
-                {file && (
-                  <p className="mt-1 truncate text-xs text-slate-400">{file.name}</p>
-                )}
-              </div>
-            )}
+            <div>
+              <label className="label">Vendor quote (upload)</label>
+              <input
+                type="file"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-arus-purple/10 file:px-3 file:py-1.5 file:text-arus-purple hover:file:bg-arus-purple/20"
+              />
+              {file && (
+                <p className="mt-1 truncate text-xs text-slate-400">{file.name}</p>
+              )}
+            </div>
           </div>
 
           {error && (
