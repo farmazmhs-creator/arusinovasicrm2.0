@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Search, Trash2, X, TrendingUp } from "lucide-react";
+import { Plus, Search, Trash2, X, TrendingUp, Paperclip } from "lucide-react";
 import { formatMYR, formatDate } from "@/lib/format";
+import { createClient } from "@/lib/supabase/client";
+import { useSort } from "@/lib/useSort";
+import SortableTh from "@/components/SortableTh";
 
 type Entry = {
   id: string;
@@ -13,6 +16,12 @@ type Entry = {
   effective_from: string;
   valid_until: string | null;
   notes: string | null;
+  ex_stock: boolean | null;
+  est_delivery_on_payment: string | null;
+  terms: string | null;
+  moq: number | null;
+  vendor_quote_name: string | null;
+  quote_url: string | null;
   sell_price: number;
   margin: number;
   margin_pct: number | null;
@@ -44,7 +53,15 @@ export default function PricebookClient() {
   );
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
+  // Vendor-quote detail
+  const [exStock, setExStock] = useState(""); // "" | "yes" | "no"
+  const [estDelivery, setEstDelivery] = useState("");
+  const [terms, setTerms] = useState("");
+  const [moq, setMoq] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const supabase = createClient();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +88,11 @@ export default function PricebookClient() {
     setCostPrice("");
     setNotes("");
     setValidUntil("");
+    setExStock("");
+    setEstDelivery("");
+    setTerms("");
+    setMoq("");
+    setFile(null);
   }
 
   async function submit(e: React.FormEvent) {
@@ -84,6 +106,31 @@ export default function PricebookClient() {
 
     setSaving(true);
     let res: Response;
+
+    // Vendor-quote detail shared by both paths.
+    const vendorDetail = {
+      ex_stock: exStock === "" ? null : exStock === "yes",
+      est_delivery_on_payment: estDelivery || null,
+      terms: terms || null,
+      moq: moq || null,
+    };
+
+    // Upload the vendor quotation document (existing-product path keys on the id).
+    let vendorQuotePath: string | null = null;
+    let vendorQuoteName: string | null = null;
+    if (file && !isNew && productId) {
+      const path = `vendor-quotes/${productId}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage
+        .from("quote-docs")
+        .upload(path, file);
+      if (upErr) {
+        setSaving(false);
+        setError("File upload failed: " + upErr.message);
+        return;
+      }
+      vendorQuotePath = path;
+      vendorQuoteName = file.name;
+    }
 
     if (isNew) {
       // New product: one call creates the product, an inventory row (stock 0)
@@ -105,6 +152,7 @@ export default function PricebookClient() {
           cost_price: Number(costPrice),
           qty_on_hand: 0,
           reorder_point: 10,
+          ...vendorDetail,
         }),
       });
     } else {
@@ -124,6 +172,9 @@ export default function PricebookClient() {
           effective_from: new Date(effectiveFrom).toISOString(),
           valid_until: validUntil ? new Date(validUntil).toISOString() : null,
           notes: notes || null,
+          ...vendorDetail,
+          vendor_quote_path: vendorQuotePath,
+          vendor_quote_name: vendorQuoteName,
         }),
       });
     }
@@ -155,6 +206,8 @@ export default function PricebookClient() {
     if (onlyActive && !e.active) return false;
     return true;
   });
+
+  const { sorted, sortKey, dir, toggle } = useSort(filtered, "products.name");
 
   const selectedProduct = products.find((p) => p.id === productId);
   const sellForMargin = isNew
@@ -390,6 +443,62 @@ export default function PricebookClient() {
                 </div>
               </>
             )}
+
+            {/* Vendor-quote detail — applies to any quote */}
+            <div>
+              <label className="label">Ex-stock available?</label>
+              <select
+                className="input"
+                value={exStock}
+                onChange={(e) => setExStock(e.target.value)}
+              >
+                <option value="">—</option>
+                <option value="yes">Yes — ready stock</option>
+                <option value="no">No — indent order</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">MOQ (min order qty)</label>
+              <input
+                type="number"
+                min={0}
+                className="input"
+                value={moq}
+                onChange={(e) => setMoq(e.target.value)}
+                placeholder="e.g. 50"
+              />
+            </div>
+            <div>
+              <label className="label">Est. delivery upon payment</label>
+              <input
+                className="input"
+                value={estDelivery}
+                onChange={(e) => setEstDelivery(e.target.value)}
+                placeholder="e.g. 2–3 weeks"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Terms &amp; conditions</label>
+              <input
+                className="input"
+                value={terms}
+                onChange={(e) => setTerms(e.target.value)}
+                placeholder="e.g. 100% payment before delivery; quote valid 30 days"
+              />
+            </div>
+            {!isNew && (
+              <div>
+                <label className="label">Vendor quote (upload)</label>
+                <input
+                  type="file"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-arus-purple/10 file:px-3 file:py-1.5 file:text-arus-purple hover:file:bg-arus-purple/20"
+                />
+                {file && (
+                  <p className="mt-1 truncate text-xs text-slate-400">{file.name}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {error && (
@@ -441,18 +550,19 @@ export default function PricebookClient() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">Product</th>
-              <th className="th">Vendor</th>
-              <th className="th">Source</th>
-              <th className="th text-right">Cost</th>
-              <th className="th text-right">Sell</th>
-              <th className="th text-right">Margin</th>
-              <th className="th">Effective</th>
+              <SortableTh label="Product" sortKey="products.name" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Vendor" sortKey="vendor_name" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Source" sortKey="vendor_type" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Cost" sortKey="cost_price" activeKey={sortKey} dir={dir} onSort={toggle} align="right" />
+              <SortableTh label="Sell" sortKey="sell_price" activeKey={sortKey} dir={dir} onSort={toggle} align="right" />
+              <SortableTh label="Margin" sortKey="margin_pct" activeKey={sortKey} dir={dir} onSort={toggle} align="right" />
+              <SortableTh label="Effective" sortKey="effective_from" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <th className="th">Supply</th>
               <th className="th"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((e) => (
+            {sorted.map((e) => (
               <tr key={e.id} className={`hover:bg-slate-50 ${!e.active ? "opacity-50" : ""}`}>
                 <td className="td">
                   <span className="font-medium text-slate-900">
@@ -500,6 +610,41 @@ export default function PricebookClient() {
                     <span className="block">to {formatDate(e.valid_until)}</span>
                   )}
                 </td>
+                <td className="td text-xs text-slate-500">
+                  {e.ex_stock === true && (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                      Ex-stock
+                    </span>
+                  )}
+                  {e.ex_stock === false && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                      Indent
+                    </span>
+                  )}
+                  {e.moq != null && <span className="block">MOQ {e.moq}</span>}
+                  {e.est_delivery_on_payment && (
+                    <span className="block">{e.est_delivery_on_payment}</span>
+                  )}
+                  {e.terms && (
+                    <span
+                      className="block max-w-[160px] truncate"
+                      title={e.terms}
+                    >
+                      {e.terms}
+                    </span>
+                  )}
+                  {e.quote_url && (
+                    <a
+                      href={e.quote_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-arus-purple hover:underline"
+                    >
+                      <Paperclip style={{ width: 12, height: 12 }} />
+                      {e.vendor_quote_name ? "Quote" : "Quote"}
+                    </a>
+                  )}
+                </td>
                 <td className="td text-right">
                   <button
                     onClick={() => remove(e.id)}
@@ -513,7 +658,7 @@ export default function PricebookClient() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td className="td text-slate-400" colSpan={8}>
+                <td className="td text-slate-400" colSpan={9}>
                   {loading ? "Loading pricebook…" : "No entries match."}
                 </td>
               </tr>

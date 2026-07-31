@@ -1,11 +1,10 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Plus, Paperclip } from "lucide-react";
+import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatMYR, turnaround } from "@/lib/format";
-import StatusBadge from "@/components/StatusBadge";
 import FilterTabs from "@/components/FilterTabs";
 import SearchBar from "@/components/SearchBar";
+import QuotationsTable from "@/components/QuotationsTable";
 
 export const dynamic = "force-dynamic";
 
@@ -117,70 +116,7 @@ export default async function QuotationsPage({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="th">Quote #</th>
-              <th className="th">Customer</th>
-              <th className="th">Requested By</th>
-              <th className="th">Processed By</th>
-              <th className="th text-right">Quote Amount</th>
-              <th className="th">Status</th>
-              <th className="th">Turnaround</th>
-              <th className="th"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-50">
-                <td className="td whitespace-nowrap font-medium text-slate-900">
-                  <span className="inline-flex items-center gap-1.5">
-                    {r.quote_number}
-                    {hasDoc.has(r.id) && (
-                      <Paperclip
-                        style={{ width: 13, height: 13 }}
-                        className="text-arus-orange"
-                      />
-                    )}
-                  </span>
-                </td>
-                <td className="td">{r.customers?.hospital_name ?? "—"}</td>
-                <td className="td">{r.sales_reps?.name ?? "—"}</td>
-                <td className="td">
-                  {r.processed?.name ?? (
-                    <span className="text-slate-300">Unassigned</span>
-                  )}
-                </td>
-                <td className="td whitespace-nowrap text-right font-medium">
-                  {formatMYR(r.total_amount)}
-                </td>
-                <td className="td">
-                  <StatusBadge status={r.status} />
-                </td>
-                <td className="td whitespace-nowrap">
-                  {turnaround(r.received_at, r.completed_at)}
-                </td>
-                <td className="td whitespace-nowrap text-right">
-                  <Link
-                    href={`/quotations/${r.id}`}
-                    className="font-medium text-arus-purple hover:underline"
-                  >
-                    View more
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td className="td text-slate-400" colSpan={8}>
-                  No quote requests match your search.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <QuotationsTable rows={rows} hasDoc={[...hasDoc]} />
     </div>
   );
 }

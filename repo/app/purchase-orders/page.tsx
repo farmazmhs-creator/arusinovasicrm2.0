@@ -2,10 +2,9 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatMYR, formatDate } from "@/lib/format";
-import StatusBadge from "@/components/StatusBadge";
 import FilterTabs from "@/components/FilterTabs";
 import SearchBar from "@/components/SearchBar";
+import PurchaseOrdersTable from "@/components/PurchaseOrdersTable";
 
 export const dynamic = "force-dynamic";
 
@@ -89,60 +88,7 @@ export default async function PurchaseOrdersPage({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="th">PO #</th>
-              <th className="th">Customer</th>
-              <th className="th text-right">Amount</th>
-              <th className="th">Status</th>
-              <th className="th">Raised</th>
-              <th className="th">Due Date</th>
-              <th className="th"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((p) => (
-              <tr key={p.id} className="hover:bg-slate-50">
-                <td className="td whitespace-nowrap font-medium text-slate-900">
-                  {p.po_number}
-                </td>
-                <td className="td">
-                  {p.customers?.hospital_name ?? p.customers?.name ?? "—"}
-                </td>
-                <td className="td whitespace-nowrap text-right font-medium">
-                  {formatMYR(p.total_amount)}
-                </td>
-                <td className="td">
-                  <StatusBadge status={p.status} />
-                </td>
-                <td className="td whitespace-nowrap">
-                  {formatDate(p.created_at)}
-                </td>
-                <td className="td whitespace-nowrap">
-                  {formatDate(p.delivery_due)}
-                </td>
-                <td className="td text-right">
-                  <Link
-                    href={`/purchase-orders/${p.id}`}
-                    className="font-medium text-arus-purple hover:underline"
-                  >
-                    View more
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td className="td text-slate-400" colSpan={7}>
-                  No purchase orders match your search.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <PurchaseOrdersTable rows={rows} />
     </div>
   );
 }

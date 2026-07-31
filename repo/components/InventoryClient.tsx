@@ -13,6 +13,8 @@ import {
   Pencil,
 } from "lucide-react";
 import { formatMYR } from "@/lib/format";
+import { useSort } from "@/lib/useSort";
+import SortableTh from "@/components/SortableTh";
 
 type Row = {
   id: string;
@@ -156,6 +158,8 @@ export default function InventoryClient() {
       return r.needs_refresh || r.low_stock || r.out_of_stock;
     return true;
   });
+
+  const { sorted, sortKey, dir, toggle } = useSort(filtered, "name");
 
   return (
     <div>
@@ -412,19 +416,19 @@ export default function InventoryClient() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">Product</th>
-              <th className="th">SKU</th>
-              <th className="th">On Hand</th>
-              <th className="th">Reserved</th>
-              <th className="th">Available</th>
-              <th className="th">Reorder At</th>
+              <SortableTh label="Product" sortKey="name" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="SKU" sortKey="sku" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="On Hand" sortKey="qty_on_hand" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Reserved" sortKey="reserved" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Available" sortKey="available" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Reorder At" sortKey="reorder_point" activeKey={sortKey} dir={dir} onSort={toggle} />
               <th className="th">Status</th>
-              <th className="th text-right">Unit Price</th>
+              <SortableTh label="Unit Price" sortKey="unit_price" activeKey={sortKey} dir={dir} onSort={toggle} align="right" />
               <th className="th"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((r) => {
+            {sorted.map((r) => {
               const isEditing = editing === r.id;
               return (
                 <tr key={r.id} className="hover:bg-slate-50">

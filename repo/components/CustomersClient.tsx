@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search, X, Building2, Users } from "lucide-react";
+import { useSort } from "@/lib/useSort";
+import SortableTh from "@/components/SortableTh";
 
 const STATES = [
   "Selangor", "Johor", "Perak", "Kelantan", "Pulau Pinang", "Kedah",
@@ -103,6 +105,8 @@ export default function CustomersClient() {
       (r.primary_contact?.name ?? "").toLowerCase().includes(n)
     );
   });
+
+  const { sorted, sortKey, dir, toggle } = useSort(filtered, "hospital_name");
 
   return (
     <div>
@@ -243,16 +247,16 @@ export default function CustomersClient() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">Hospital</th>
-              <th className="th">State</th>
-              <th className="th">Area</th>
-              <th className="th">Primary Contact</th>
-              <th className="th">Contacts</th>
+              <SortableTh label="Hospital" sortKey="hospital_name" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="State" sortKey="state" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Area" sortKey="area" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Primary Contact" sortKey="primary_contact.name" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortableTh label="Contacts" sortKey="contact_count" activeKey={sortKey} dir={dir} onSort={toggle} />
               <th className="th"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((r) => (
+            {sorted.map((r) => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="td font-medium text-slate-900">
                   {r.hospital_name}

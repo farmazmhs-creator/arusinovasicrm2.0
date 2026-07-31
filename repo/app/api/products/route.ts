@@ -79,6 +79,13 @@ export async function POST(request: Request) {
       cost_price: Number(body.cost_price),
       created_by: user.id,
       notes: "Opening cost",
+      ex_stock: body.ex_stock ?? null,
+      est_delivery_on_payment: body.est_delivery_on_payment || null,
+      terms: body.terms || null,
+      moq:
+        body.moq !== undefined && body.moq !== "" && body.moq !== null
+          ? Number(body.moq)
+          : null,
     });
   }
 
