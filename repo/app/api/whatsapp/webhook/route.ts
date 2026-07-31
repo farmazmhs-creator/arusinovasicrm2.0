@@ -167,6 +167,48 @@ async function deliveryStatus(admin: any, raw: string) {
   );
 }
 
+// ---------- new quote request intake ----------
+/** Match an existing hospital by name, or create one so the request can attach. */
+async function resolveCustomer(admin: any, name: string) {
+  const clean = name.trim();
+  const { data: match } = await admin
+    .from("customers")
+    .select("id, hospital_name")
+    .ilike("hospital_name", `%${clean}%`)
+    .limit(1)
+    .maybeSingle();
+  if (match) return match;
+  const { data: created } = await admin
+    .from("customers")
+    .insert({ hospital_name: clean })
+    .select("id, hospital_name")
+    .single();
+  return created;
+}
+
+/** Create a Received quote request from the WhatsApp intake and return its number. */
+async function createWaQuote(
+  admin: any,
+  phone: string,
+  customerId: string,
+  itemsText: string
+) {
+  const { count } = await admin
+    .from("quotations")
+    .select("id", { count: "exact", head: true });
+  const quoteNumber = `QT-2026-${String((count ?? 0) + 1).padStart(4, "0")}`;
+  await admin.from("quotations").insert({
+    quote_number: quoteNumber,
+    customer_id: customerId,
+    status: "received",
+    source: "whatsapp",
+    received_at: new Date().toISOString(),
+    total_amount: 0,
+    intake_note: `Via WhatsApp (${phone})\n\nRequested:\n${itemsText}`,
+  });
+  return quoteNumber;
+}
+
 // ---------- webhook ----------
 export async function GET() {
   return new Response("Arus Inovasi WhatsApp webhook is live.", {
@@ -220,17 +262,19 @@ export async function POST(request: Request) {
   // load session
   const { data: session } = await admin
     .from("wa_sessions")
-    .select("state")
+    .select("state, data")
     .eq("phone", phone)
     .maybeSingle();
 
   const state = session?.state ?? "new";
+  const sessionData: any = session?.data ?? {};
   const lower = bodyRaw.toLowerCase();
   const isReset = ["menu", "hi", "hello", "hey", "start"].includes(lower);
   const isBack = lower === "0" || lower === "back";
 
   let reply = MAIN_MENU;
   let nextState = "menu";
+  let nextData: any = null; // partial intake carried between steps
 
   if (state === "new" || isReset) {
     reply = MAIN_MENU;
@@ -254,8 +298,9 @@ export async function POST(request: Request) {
       reply = MAIN_MENU;
       nextState = "menu";
     } else if (bodyRaw === "1") {
-      reply = COMING_SOON; // New Quote Request
-      nextState = "menu";
+      reply =
+        "🆕 *New Quote Request*\n\nWhich *hospital / customer* is this for?\n_(type the name — or 0 to go back)_";
+      nextState = "nq_hospital";
     } else if (bodyRaw === "2") {
       reply = "Send me the *quote number* (e.g. QT-2026-0001).";
       nextState = "ask_quote_ref";
@@ -301,13 +346,55 @@ export async function POST(request: Request) {
       reply = await deliveryStatus(admin, bodyRaw);
       nextState = "menu";
     }
+  } else if (state === "nq_hospital") {
+    if (isBack) {
+      reply = MAIN_MENU;
+      nextState = "menu";
+    } else {
+      const cust = await resolveCustomer(admin, bodyRaw);
+      if (!cust) {
+        reply = "Sorry, I couldn't save that hospital. Try again, or reply MENU.";
+        nextState = "nq_hospital";
+      } else {
+        nextData = { customer_id: cust.id, hospital: cust.hospital_name };
+        reply =
+          `Got it — *${cust.hospital_name}*.\n\n` +
+          "Now, *what do you need quoted?*\n" +
+          "List the products & quantities, or describe the request.";
+        nextState = "nq_items";
+      }
+    }
+  } else if (state === "nq_items") {
+    if (isBack) {
+      reply = MAIN_MENU;
+      nextState = "menu";
+    } else if (!sessionData?.customer_id) {
+      reply = "Something went wrong. Reply MENU and start again.";
+      nextState = "menu";
+    } else {
+      const qn = await createWaQuote(
+        admin,
+        phone,
+        sessionData.customer_id,
+        bodyRaw
+      );
+      reply =
+        `✅ *${qn}* created for *${sessionData.hospital}*.\n` +
+        "Ops will pick it up shortly.\n\n_Reply MENU for the menu._";
+      nextState = "menu";
+    }
   }
 
   // save session + log outbound
   await admin
     .from("wa_sessions")
     .upsert(
-      { phone, state: nextState, updated_at: new Date().toISOString() },
+      {
+        phone,
+        state: nextState,
+        data: nextData,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "phone" }
     );
   admin

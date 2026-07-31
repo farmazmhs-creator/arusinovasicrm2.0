@@ -147,7 +147,6 @@ export default function QuotationsTable({
               <SortableTh label="Quote Amount" sortKey="total_amount" activeKey={sortKey} dir={dir} onSort={toggle} align="right" />
               <SortableTh label="Status" sortKey="status" activeKey={sortKey} dir={dir} onSort={toggle} />
               <SortableTh label="Turnaround" sortKey="_turn" activeKey={sortKey} dir={dir} onSort={toggle} />
-              <th className="th"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -166,13 +165,16 @@ export default function QuotationsTable({
                     aria-label={`Select ${r.quote_number}`}
                   />
                 </td>
-                <td className="td whitespace-nowrap font-medium text-slate-900">
-                  <span className="inline-flex items-center gap-1.5">
+                <td className="td whitespace-nowrap font-medium">
+                  <Link
+                    href={`/quotations/${r.id}`}
+                    className="inline-flex items-center gap-1.5 text-arus-purple hover:underline"
+                  >
                     {r.quote_number}
                     {docSet.has(r.id) && (
                       <Paperclip style={{ width: 13, height: 13 }} className="text-arus-orange" />
                     )}
-                  </span>
+                  </Link>
                 </td>
                 <td className="td">{r.customers?.hospital_name ?? "—"}</td>
                 <td className="td">{r.sales_reps?.name ?? "—"}</td>
@@ -191,16 +193,11 @@ export default function QuotationsTable({
                 <td className="td whitespace-nowrap">
                   {turnaround(r.received_at, r.completed_at)}
                 </td>
-                <td className="td whitespace-nowrap text-right">
-                  <Link href={`/quotations/${r.id}`} className="font-medium text-arus-purple hover:underline">
-                    View more
-                  </Link>
-                </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td className="td text-slate-400" colSpan={10}>
+                <td className="td text-slate-400" colSpan={9}>
                   No quote requests match your search.
                 </td>
               </tr>

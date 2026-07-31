@@ -26,7 +26,7 @@ export default async function QuotationDetailPage({
   const { data: quote } = await supabase
     .from("quotations")
     .select(
-      "id, quote_number, status, total_amount, discount_pct, received_at, in_progress_at, completed_at, sent_at, source, external_ref, hold_note, processed_by, customers(name, hospital_name), sales_reps(name, code), processed:user_profiles!quotations_processed_by_fkey(name)"
+      "id, quote_number, status, total_amount, discount_pct, received_at, in_progress_at, completed_at, sent_at, source, external_ref, hold_note, intake_note, processed_by, customers(name, hospital_name), sales_reps(name, code), processed:user_profiles!quotations_processed_by_fkey(name)"
     )
     .eq("id", id)
     .single();
@@ -156,6 +156,13 @@ export default async function QuotationDetailPage({
           <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
             <span className="font-semibold">On hold:</span> {q.hold_note}
           </p>
+        )}
+
+        {q.intake_note && (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <p className="mb-1 font-semibold">📲 Request details (from WhatsApp)</p>
+            <p className="whitespace-pre-wrap">{q.intake_note}</p>
+          </div>
         )}
       </div>
 

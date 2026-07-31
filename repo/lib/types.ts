@@ -44,6 +44,7 @@ export type Quotation = {
   source: string;
   external_ref: string | null;
   hold_note: string | null;
+  intake_note?: string | null;
   processed_by: string | null;
   created_at: string;
   updated_at: string;
