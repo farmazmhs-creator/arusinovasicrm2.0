@@ -1,10 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Target, Check, Loader2, Scale, Split } from "lucide-react";
+import {
+  Target,
+  Check,
+  Loader2,
+  Split,
+  RefreshCw,
+  Wand2,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
 import { formatMYR } from "@/lib/format";
+import TargetsWizard, { WizRep } from "./TargetsWizard";
 
-type Rep = { id: string; name: string; code: string; target: number };
+function tier(p: number) {
+  if (p >= 100) return { label: "Smashed it!", emoji: "🏆", color: "#0f9d6b" };
+  if (p >= 80) return { label: "Almost there", emoji: "🥇", color: "#F26522" };
+  if (p >= 50) return { label: "On the way", emoji: "🥈", color: "#e59a1c" };
+  return { label: "Building up", emoji: "🥉", color: "#8a92a1" };
+}
+
+type Rep = {
+  id: string;
+  name: string;
+  code: string;
+  region?: string | null;
+  target: number;
+};
 type Gran = "month" | "quarter" | "year";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -24,11 +47,38 @@ export default function TargetsClient() {
   );
 
   const [company, setCompany] = useState<string>("");
+  const [companyAuto, setCompanyAuto] = useState(true); // company = sum of reps unless overridden
   const [reps, setReps] = useState<Rep[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [ach, setAch] = useState<any>(null); // live achievement for the period
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Wizard + blank-state detection (based on the target YEAR, not the editing period)
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [yearChecked, setYearChecked] = useState(false);
+  const [yearHasTargets, setYearHasTargets] = useState(false);
+  const [yearReps, setYearReps] = useState<WizRep[]>([]);
+
+  const checkYear = useCallback(async () => {
+    setYearChecked(false);
+    const res = await fetch(
+      `/api/targets?granularity=year&periodStart=${year}-01-01`
+    );
+    const j = await res.json();
+    const repList: WizRep[] = j.reps ?? [];
+    const total =
+      Number(j.company_target ?? 0) +
+      repList.reduce((a, r) => a + Number(r.target ?? 0), 0);
+    setYearReps(repList);
+    setYearHasTargets(total > 0);
+    setYearChecked(true);
+  }, [year]);
+
+  useEffect(() => {
+    checkYear();
+  }, [checkYear]);
 
   // First month of the selected period, as YYYY-MM-01.
   const periodStart = useMemo(() => {
@@ -47,6 +97,14 @@ export default function TargetsClient() {
     return `${year}`;
   }, [gran, month, quarter, year]);
 
+  // End of the selected period (exclusive), for the achievement lookup.
+  const periodEnd = useMemo(() => {
+    const [y, m] = periodStart.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1, 1));
+    d.setUTCMonth(d.getUTCMonth() + (gran === "year" ? 12 : gran === "quarter" ? 3 : 1));
+    return d.toISOString();
+  }, [periodStart, gran]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setSaved(false);
@@ -54,7 +112,14 @@ export default function TargetsClient() {
       `/api/targets?granularity=${gran}&periodStart=${periodStart}`
     );
     const j = await res.json();
-    setCompany(String(Math.round(j.company_target ?? 0)));
+    const loadedCompany = Math.round(j.company_target ?? 0);
+    const repTotalLoaded = (j.reps ?? []).reduce(
+      (a: number, r: Rep) => a + Math.round(r.target ?? 0),
+      0
+    );
+    setCompany(String(loadedCompany));
+    // Default to auto (= sum of reps) unless a distinct company override was saved.
+    setCompanyAuto(loadedCompany === 0 || Math.abs(loadedCompany - repTotalLoaded) < 1);
     setReps(j.reps ?? []);
     const d: Record<string, string> = {};
     (j.reps ?? []).forEach((r: Rep) => (d[r.id] = String(Math.round(r.target ?? 0))));
@@ -66,10 +131,27 @@ export default function TargetsClient() {
     load();
   }, [load]);
 
+  // Live achievement for the selected period (re-checks after a save).
+  useEffect(() => {
+    fetch(`/api/sales-dashboard?from=${new Date(periodStart).toISOString()}&to=${periodEnd}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setAch(j?.summary ?? null))
+      .catch(() => setAch(null));
+  }, [periodStart, periodEnd, saved]);
+
   const repTotal = reps.reduce((a, r) => a + Number(draft[r.id] || 0), 0);
-  const companyNum = Number(company || 0);
+  // Company target auto-follows the sum of rep targets unless the director overrides it.
+  const effectiveCompany = companyAuto ? repTotal : Number(company || 0);
+  const companyNum = effectiveCompany;
   const diff = companyNum - repTotal;
   const matched = Math.abs(diff) < 1;
+
+  // Gamified achievement vs the SAVED target for this period.
+  const achieved = Number(ach?.revenue ?? 0);
+  const achTarget = Number(ach?.target ?? 0);
+  const achPct = achTarget > 0 ? (achieved / achTarget) * 100 : 0;
+  const tr = tier(achPct);
+  const achGap = Math.max(0, achTarget - achieved);
 
   async function saveOne(rep_id: string | null, amount: string) {
     await fetch("/api/targets", {
@@ -87,16 +169,13 @@ export default function TargetsClient() {
   async function saveAll() {
     setSaving(true);
     setSaved(false);
-    await saveOne(null, company);
+    await saveOne(null, String(Math.round(effectiveCompany)));
     for (const r of reps) await saveOne(r.id, draft[r.id] ?? "0");
     setSaving(false);
     setSaved(true);
     load();
   }
 
-  function companyEqualsReps() {
-    setCompany(String(Math.round(repTotal)));
-  }
   function splitCompanyToReps() {
     if (!reps.length) return;
     const each = Math.round(companyNum / reps.length);
@@ -109,6 +188,19 @@ export default function TargetsClient() {
 
   return (
     <div>
+      {wizardOpen && (
+        <TargetsWizard
+          reps={yearReps}
+          year={year}
+          onClose={() => setWizardOpen(false)}
+          onSaved={() => {
+            setWizardOpen(false);
+            checkYear();
+            load();
+          }}
+        />
+      )}
+
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
@@ -121,23 +213,65 @@ export default function TargetsClient() {
             read-only.
           </p>
         </div>
-        <button onClick={saveAll} disabled={saving || loading} className="btn-primary h-10">
-          {saving ? (
-            <>
-              <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" />
-              Saving…
-            </>
-          ) : saved ? (
-            <>
-              <Check style={{ width: 16, height: 16 }} />
-              Saved
-            </>
-          ) : (
-            "Save all"
-          )}
-        </button>
+        {yearChecked && yearHasTargets && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setWizardOpen(true)}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-arus-purple/40 bg-arus-purple/5 px-4 text-sm font-medium text-arus-purple hover:bg-arus-purple/10"
+            >
+              <Wand2 style={{ width: 16, height: 16 }} />
+              Re-run setup wizard
+            </button>
+            <button
+              onClick={saveAll}
+              disabled={saving || loading}
+              className="btn-primary h-10"
+            >
+              {saving ? (
+                <>
+                  <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" />
+                  Saving…
+                </>
+              ) : saved ? (
+                <>
+                  <Check style={{ width: 16, height: 16 }} />
+                  Saved
+                </>
+              ) : (
+                "Save all"
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Blank state — no targets for this year yet */}
+      {!yearChecked ? (
+        <div className="card text-sm text-slate-400">Checking targets…</div>
+      ) : !yearHasTargets ? (
+        <div className="card flex flex-col items-center px-6 py-14 text-center">
+          <span className="mb-4 rounded-2xl bg-arus-purple/10 p-4 text-arus-purple">
+            <Sparkles style={{ width: 32, height: 32 }} />
+          </span>
+          <h2 className="text-xl font-bold text-slate-900">
+            No targets set for {year} yet
+          </h2>
+          <p className="mt-2 max-w-md text-sm text-slate-500">
+            Let's set targets for your team. The wizard walks you through the
+            yearly number, how it splits across reps, and how it spreads across
+            the months — including seasonality by company, region or rep.
+          </p>
+          <button
+            onClick={() => setWizardOpen(true)}
+            className="btn-primary mt-6 h-11 px-6 text-base"
+          >
+            <Wand2 style={{ width: 18, height: 18 }} />
+            Set targets now for your team
+            <ArrowRight style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+      ) : (
+      <div>
       {/* Period controls */}
       <div className="card mb-4">
         <div className="flex flex-wrap items-end gap-4">
@@ -198,6 +332,67 @@ export default function TargetsClient() {
         </div>
       </div>
 
+      {/* Gamified achievement mini-dashboard */}
+      <div className="card mb-4 overflow-hidden">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-800">
+            Achievement · {periodLabel}
+          </h3>
+          <span className="text-[11px] text-slate-400">actual vs saved target</span>
+        </div>
+        {achTarget > 0 ? (
+          <div className="flex flex-wrap items-center gap-5">
+            <div
+              className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full"
+              style={{ background: `conic-gradient(${tr.color} ${Math.min(100, achPct)}%, #eef0f4 0)` }}
+            >
+              <span className="flex h-[74px] w-[74px] flex-col items-center justify-center rounded-full bg-white">
+                <span className="text-xl font-bold" style={{ color: tr.color }}>
+                  {achPct.toFixed(0)}%
+                </span>
+                <span className="text-[16px] leading-none">{tr.emoji}</span>
+              </span>
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <p className="text-lg font-bold" style={{ color: tr.color }}>
+                {tr.emoji} {tr.label}
+              </p>
+              <p className="mt-0.5 text-sm text-slate-600">
+                <b className="text-slate-900">{formatMYR(achieved)}</b> of{" "}
+                {formatMYR(achTarget)}
+              </p>
+              <p className="text-xs text-slate-500">
+                {achPct >= 100
+                  ? `🎉 target beaten by ${formatMYR(achieved - achTarget)}`
+                  : `${formatMYR(achGap)} to go`}
+              </p>
+              {/* Milestone bar */}
+              <div className="relative mt-3 h-2.5 w-full rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${Math.min(100, achPct)}%`, background: tr.color }}
+                />
+                {[25, 50, 75].map((mk) => (
+                  <span
+                    key={mk}
+                    className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-white"
+                    style={{ left: `${mk}%` }}
+                  />
+                ))}
+              </div>
+              <div className="mt-1 flex justify-between text-[9px] text-slate-400">
+                <span>0</span><span>25</span><span>50</span><span>75</span><span>100%</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            No saved target for {periodLabel} yet — set targets below and Save to
+            track achievement here.
+          </p>
+        )}
+      </div>
+
       {/* Reconciliation */}
       <div
         className={`card mb-4 border ${
@@ -220,10 +415,11 @@ export default function TargetsClient() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={companyEqualsReps}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              onClick={() => setCompanyAuto(true)}
+              disabled={companyAuto}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
             >
-              <Scale style={{ width: 13, height: 13 }} /> Company = reps total
+              <RefreshCw style={{ width: 13, height: 13 }} /> Auto = sum of reps
             </button>
             <button
               onClick={splitCompanyToReps}
@@ -240,16 +436,35 @@ export default function TargetsClient() {
       ) : (
         <div className="space-y-4">
           <div className="card">
-            <label className="label">Company target · {periodLabel}</label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="label mb-0">Company target · {periodLabel}</label>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  companyAuto
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-amber-50 text-amber-700"
+                }`}
+              >
+                {companyAuto ? "Auto — sum of reps" : "Manual override"}
+              </span>
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-slate-500">RM</span>
               <input
                 type="number"
                 min={0}
                 className="input h-10 w-56"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
+                value={String(Math.round(effectiveCompany))}
+                onChange={(e) => {
+                  setCompanyAuto(false);
+                  setCompany(e.target.value);
+                }}
               />
+              {companyAuto && (
+                <span className="text-xs text-slate-400">
+                  follows the {reps.length} rep targets — type to override
+                </span>
+              )}
             </div>
           </div>
 
@@ -304,6 +519,8 @@ export default function TargetsClient() {
             </div>
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   );
