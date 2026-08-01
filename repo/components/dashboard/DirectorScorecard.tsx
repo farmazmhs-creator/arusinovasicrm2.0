@@ -5,10 +5,14 @@ import Link from "next/link";
 import {
   AreaChart,
   Area,
+  ComposedChart,
+  Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 import {
@@ -26,6 +30,7 @@ import HeatMap from "./HeatMap";
 import Pareto from "./Pareto";
 import BarList from "./BarList";
 import ExpandableChart from "./ExpandableChart";
+import DirectorPanel from "./DirectorPanel";
 
 const RANGES = [
   { key: "3m", label: "3M", months: 3 },
@@ -88,6 +93,34 @@ function Spark({ vals, color }: { vals: number[]; color: string }) {
   );
 }
 
+/** Combo bar (period revenue) + line (cumulative %) built from heatmap cells. */
+function PeriodCombo({ cells }: { cells: { row: string; col: string; v: number }[] }) {
+  const m = new Map<string, number>();
+  cells.forEach((c) => m.set(c.col, (m.get(c.col) ?? 0) + c.v));
+  const arr = [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const tot = arr.reduce((a, r) => a + r[1], 0) || 1;
+  let run = 0;
+  const data = arr.map(([period, rev]) => {
+    run += rev;
+    return { period, Revenue: rev, Cumulative: (run / tot) * 100 };
+  });
+  if (!data.length) return <p className="text-sm text-slate-400">No data.</p>;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" />
+        <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+        <YAxis yAxisId="l" tick={{ fontSize: 11 }} tickFormatter={(v) => formatMYRShort(v)} />
+        <YAxis yAxisId="r" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+        <Tooltip formatter={(v: any, n: any) => (n === "Cumulative" ? `${Number(v).toFixed(1)}%` : formatMYR(Number(v)))} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Bar yAxisId="l" dataKey="Revenue" fill="#F26522" radius={[3, 3, 0, 0]} />
+        <Line yAxisId="r" type="monotone" dataKey="Cumulative" stroke="#3B1053" strokeWidth={2} dot={{ r: 2 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
 export default function DirectorScorecard({
   name,
   options,
@@ -98,8 +131,9 @@ export default function DirectorScorecard({
   const [rangeKey, setRangeKey] = useState("12m");
   const [compare, setCompare] = useState("mom");
   const [gran, setGran] = useState("month");
-  const [f, setF] = useState({ state: "", customer: "", product: "" });
+  const [f, setF] = useState({ rep: "", state: "", customer: "", product: "" });
   const [data, setData] = useState<any>(null);
+  const [ops, setOps] = useState<any>(null);
   const [act, setAct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -107,16 +141,21 @@ export default function DirectorScorecard({
 
   const load = useCallback(async () => {
     setLoading(true);
-    const qs = new URLSearchParams({ from: isoFrom(range.months), compare, gran });
-    if (f.state) qs.set("state", f.state);
-    if (f.customer) qs.set("customer", f.customer);
-    if (f.product) qs.set("product", f.product);
-    const [sd, ai] = await Promise.all([
+    const from = isoFrom(range.months);
+    const qs = new URLSearchParams({ from, compare, gran });
+    const oqs = new URLSearchParams({ from, compare });
+    if (f.rep) { qs.set("rep", f.rep); oqs.set("rep", f.rep); }
+    if (f.state) { qs.set("state", f.state); oqs.set("state", f.state); }
+    if (f.customer) { qs.set("customer", f.customer); oqs.set("customer", f.customer); }
+    if (f.product) { qs.set("product", f.product); oqs.set("product", f.product); }
+    const [sd, ai, od] = await Promise.all([
       fetch(`/api/sales-dashboard?${qs}`).then((r) => r.json()),
       fetch("/api/action-items").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/dashboard?${oqs}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     setData(sd);
     setAct(ai);
+    setOps(od);
     setLoading(false);
   }, [range.months, compare, gran, f]);
 
@@ -187,7 +226,11 @@ export default function DirectorScorecard({
 
   const red = Number(act?.red ?? 0);
   const amber = Number(act?.amber ?? 0);
-  const decisions: any[] = (act?.items ?? []).slice(0, 4);
+  // Grouped exceptions (management-by-exception) — each has a readable label + count.
+  const decisions: any[] = [...(act?.by_rule ?? [])]
+    .filter((r: any) => (r.n ?? 0) > 0)
+    .sort((a: any, b: any) => (b.red ?? 0) - (a.red ?? 0) || (b.n ?? 0) - (a.n ?? 0))
+    .slice(0, 5);
 
   const treeColors = ["#3B1053", "#5a3a7d", "#7a5a99", "#8a6aa8", "#a487c0", "#c4b1da"];
   const selectCls = "input h-9 w-auto min-w-[130px] py-1 text-sm";
@@ -215,6 +258,12 @@ export default function DirectorScorecard({
           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
             <Filter style={{ width: 14, height: 14 }} /> Filters
           </span>
+          <select className={selectCls} value={f.rep} onChange={(e) => setF({ ...f, rep: e.target.value })}>
+            <option value="">All reps</option>
+            {(options?.reps ?? []).map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
           <select className={selectCls} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}>
             <option value="">All regions</option>
             {(options?.states ?? []).map((x) => (
@@ -280,8 +329,9 @@ export default function DirectorScorecard({
             <div className="space-y-1">
               {decisions.map((d, i) => (
                 <div key={i} className="flex items-center gap-2 text-[11px] text-slate-700">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${d.severity === "red" ? "bg-rose-500" : "bg-amber-500"}`} />
-                  <span className="truncate">{d.title ?? d.rule_code}</span>
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${(d.red ?? 0) > 0 ? "bg-rose-500" : "bg-amber-500"}`} />
+                  <span className="truncate">{d.label ?? d.code}</span>
+                  <span className="ml-auto shrink-0 font-bold text-slate-500">{d.n}</span>
                 </div>
               ))}
               <Link href="/actions" className="mt-1 inline-block text-[11px] font-semibold text-arus-purple hover:underline">
@@ -335,10 +385,32 @@ export default function DirectorScorecard({
         <Seg items={GRANS} value={gran} onChange={setGran} />
       </div>
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ExpandableChart title="Rep × period revenue" subtitle="Who's hot and cold">
+        <ExpandableChart
+          title="Rep × period revenue"
+          subtitle="Who's hot and cold"
+          detail={
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-slate-700">
+                Revenue by period + cumulative
+              </h4>
+              <PeriodCombo cells={hmRep} />
+            </div>
+          }
+        >
           <HeatMap cells={hmRep} rowLabel="Rep" />
         </ExpandableChart>
-        <ExpandableChart title="Region × period revenue" subtitle="Territory momentum">
+        <ExpandableChart
+          title="Region × period revenue"
+          subtitle="Territory momentum"
+          detail={
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-slate-700">
+                Revenue by period + cumulative
+              </h4>
+              <PeriodCombo cells={hmRegion} />
+            </div>
+          }
+        >
           <HeatMap cells={hmRegion} rowLabel="Region" />
         </ExpandableChart>
       </div>
@@ -408,6 +480,17 @@ export default function DirectorScorecard({
           )}
         </div>
       </div>
+
+      {/* Deeper pipeline funnel, turnaround bottlenecks, forecast & Head-to-Head */}
+      {ops && (
+        <DirectorPanel
+          funnel={ops.funnel}
+          bottleneck={ops.bottleneck ?? []}
+          byRep={ops.by_rep ?? []}
+          byRegion={ops.by_region ?? []}
+          summary={ops.summary ?? {}}
+        />
+      )}
 
       <p className="mt-4 text-center text-xs text-slate-400">
         Every chart drills down · filters cross-connect · multi-year comparison (2025/26/27) unlocks with historical import.
@@ -489,19 +572,20 @@ function Ring({ pct }: { pct: number }) {
 }
 
 function Funnel({ requested, completed, won }: { requested: number; completed: number; won: number }) {
-  const w = (n: number) => (requested ? Math.max(6, (n / requested) * 100) : 0);
+  const w = (n: number) => (requested ? Math.max(4, (n / requested) * 100) : 0);
   const rows = [
-    { label: `${requested} requested`, width: 100, c: "#3B1053" },
-    { label: `${completed} completed`, width: w(completed), c: "#7a4fa3" },
-    { label: `${won} won`, width: w(won), c: "#F26522" },
+    { n: requested, label: "requested", width: 100, c: "#3B1053" },
+    { n: completed, label: "completed", width: w(completed), c: "#7a4fa3" },
+    { n: won, label: "won", width: w(won), c: "#F26522" },
   ];
+  // Label sits OUTSIDE the bar in dark text so short bars (e.g. "won") stay readable.
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {rows.map((r, i) => (
-        <div key={i} className="relative h-[18px]">
-          <div className="h-full rounded" style={{ width: `${r.width}%`, background: r.c }} />
-          <span className="absolute left-2 top-0 text-[10.5px] font-semibold leading-[18px] text-white">
-            {r.label}
+        <div key={i} className="flex items-center gap-2">
+          <div className="h-[15px] max-w-[70%] rounded" style={{ width: `${r.width}%`, minWidth: 6, background: r.c }} />
+          <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-slate-600">
+            <b className="text-slate-900">{r.n}</b> {r.label}
           </span>
         </div>
       ))}
