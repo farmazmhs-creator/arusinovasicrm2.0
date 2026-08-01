@@ -59,9 +59,9 @@ export async function GET(request: Request) {
   const [{ data: reps }, { data: targets }] = await Promise.all([
     supabase
       .from("sales_reps")
-      .select("id, name, code")
+      .select("id, name, code, region")
       .eq("is_active", true)
-      .order("name"),
+      .order("code"),
     supabase
       .from("sales_targets")
       .select("rep_id, scope, target_amount, period_start")
@@ -83,6 +83,94 @@ export async function GET(request: Request) {
     months,
     company_target: company,
     reps: (reps ?? []).map((r) => ({ ...r, target: byRep.get(r.id) ?? 0 })),
+  });
+}
+
+/**
+ * PUT — bulk writer used by the Targets setup wizard.
+ *
+ * Body: { year: number, rows: [{ rep_id, period_start:'YYYY-MM-01', amount }] }
+ *
+ * Writes the WHOLE year for the given reps at once (per-rep monthly rows, which
+ * are the single source of truth the dashboard reads). It first clears every
+ * rep + company monthly row inside that year, then inserts the supplied per-rep
+ * monthly rows plus a company monthly roll-up (= sum of reps that month). This
+ * lets the wizard express seasonality (different amount each month) which the
+ * even-split POST cannot.
+ */
+export async function PUT(request: Request) {
+  const { supabase, error } = await requireDirector();
+  if (error)
+    return NextResponse.json(
+      { error: error === 401 ? "Not authenticated" : "Forbidden" },
+      { status: error }
+    );
+
+  const body = await request.json();
+  const year = Number(body.year);
+  const rows: { rep_id: string; period_start: string; amount: number }[] =
+    Array.isArray(body.rows) ? body.rows : [];
+  if (!year || !rows.length)
+    return NextResponse.json(
+      { error: "year and a non-empty rows[] are required" },
+      { status: 400 }
+    );
+
+  // The 12 monthly period_start dates for this year.
+  const months = Array.from(
+    { length: 12 },
+    (_, i) => `${year}-${pad(i + 1)}-01`
+  );
+
+  // 1) Clear the whole year (rep + company monthly rows) for a clean rewrite.
+  const { error: delErr } = await supabase
+    .from("sales_targets")
+    .delete()
+    .eq("period_type", "month")
+    .in("period_start", months);
+  if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+
+  // 2) Insert per-rep monthly rows (skip zeros to keep the table tidy).
+  const repRows = rows
+    .filter((r) => r.rep_id && r.period_start && Number(r.amount) > 0)
+    .map((r) => ({
+      scope: "rep",
+      rep_id: r.rep_id,
+      period_type: "month",
+      period_start: r.period_start,
+      target_amount: Math.round(Number(r.amount) * 100) / 100,
+    }));
+
+  // 3) Company monthly roll-up = sum of all reps that month.
+  const companyByMonth = new Map<string, number>();
+  repRows.forEach((r) =>
+    companyByMonth.set(
+      r.period_start,
+      (companyByMonth.get(r.period_start) ?? 0) + r.target_amount
+    )
+  );
+  const companyRows = Array.from(companyByMonth.entries()).map(
+    ([period_start, amt]) => ({
+      scope: "company",
+      rep_id: null,
+      period_type: "month",
+      period_start,
+      target_amount: Math.round(amt * 100) / 100,
+    })
+  );
+
+  const all = [...repRows, ...companyRows];
+  if (all.length) {
+    const { error: insErr } = await supabase.from("sales_targets").insert(all);
+    if (insErr)
+      return NextResponse.json({ error: insErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    year,
+    rep_rows: repRows.length,
+    company_rows: companyRows.length,
   });
 }
 
